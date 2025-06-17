@@ -1,8 +1,10 @@
 package ua.foxminded.schoolapplication.model.domain;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.*;
-import ua.foxminded.schoolapplication.model.validation.StringValidationParameters;
 
 import java.util.Set;
 import java.util.HashSet;
@@ -21,13 +23,15 @@ public class Course implements Identifiable {
 	@Column(name = "course_id", nullable = false)
 	private Long id;
 
-	@StringValidationParameters(minLength = 2, maxLength = 100, pattern = "^[A-Za-z0-9\\s\\-:,.'&]+$")
+	@NotBlank
+	@Size(min = 2, max = 100)
+	@Pattern(regexp = "^[A-Za-z0-9\\s\\-:,.'&]+$")
 	@Column(nullable = false, unique = true)
 	private String courseName;
 
 	@ToString.Exclude
 	@EqualsAndHashCode.Exclude
-	@StringValidationParameters(isNullPossible = true, maxLength = 1000)
+	@Size(max = 1000)
 	@Basic(fetch = FetchType.LAZY)
 	@Column(columnDefinition = "TEXT")
 	private String courseDescription;

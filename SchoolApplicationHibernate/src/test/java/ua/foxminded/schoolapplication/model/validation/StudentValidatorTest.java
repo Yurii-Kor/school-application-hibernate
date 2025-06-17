@@ -9,17 +9,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-import ua.foxminded.schoolapplication.model.dao.exception.ValidationException;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
+import ua.foxminded.schoolapplication.config.ValidatorConfig;
 import ua.foxminded.schoolapplication.model.domain.Group;
 import ua.foxminded.schoolapplication.model.domain.Student;
 
-import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(SpringExtension.class)
-@ContextConfiguration(classes = { EntityValidator.class, FieldStringValidator.class })
+@ContextConfiguration(classes = { ValidatorConfig.class })
 class StudentValidatorTest {
 
 	static final String VALID_FIRST_NAME = "John";
@@ -35,31 +37,30 @@ class StudentValidatorTest {
 	static final String STUDENTS_PATTERN = "firstName: {0}, lastName: {1} | Expected valid: {2}";
 
 	@Autowired
-	private EntityValidator<Student> validator;
+	private Validator validator;
 
 	@ParameterizedTest(name = STUDENTS_PATTERN)
 	@MethodSource("provideStudentsForValidation")
 	@DisplayName("Student entity validation should behave as expected")
 	void validateStudent_ShouldBehaveAsExpected(String firstName, String lastName, boolean shouldPass) {
-		String validatedFirstName = NULL.equals(firstName) ? null : firstName;
-		String validatedLastName = NULL.equals(lastName) ? null : lastName;
+	    String validatedFirstName = NULL.equals(firstName) ? null : firstName;
+	    String validatedLastName = NULL.equals(lastName) ? null : lastName;
 
-		Group group = Group.builder().build();
+	    Group group = Group.builder().build();
 
-		Student student = Student.builder()
-				.group(group)
-				.firstName(validatedFirstName)
-				.lastName(validatedLastName)
-				.build();
+	    Student student = Student.builder()
+	        .group(group)
+	        .firstName(validatedFirstName)
+	        .lastName(validatedLastName)
+	        .build();
 
-		if (shouldPass) {
-			assertDoesNotThrow(() -> validator.validateEntities(List.of(student)),
-					"Validation should pass for student: " + student);
-		} else {
-			assertThrows(ValidationException.class,
-					() -> validator.validateEntities(List.of(student)),
-					"Validation should fail for student: " + student);
-		}
+	    Set<ConstraintViolation<Student>> violations = validator.validate(student);
+
+	    if (shouldPass) {
+	        assertTrue(violations.isEmpty(), "Expected no violations, but got: " + violations);
+	    } else {
+	        assertFalse(violations.isEmpty(), "Expected violations, but got none");
+	    }
 	}
 
 	static Stream<Arguments> provideStudentsForValidation() {

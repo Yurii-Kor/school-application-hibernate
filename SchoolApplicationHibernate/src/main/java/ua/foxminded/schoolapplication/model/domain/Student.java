@@ -1,8 +1,10 @@
 package ua.foxminded.schoolapplication.model.domain;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.*;
-import ua.foxminded.schoolapplication.model.validation.StringValidationParameters;
 
 import java.util.Set;
 import java.util.HashSet;
@@ -25,11 +27,15 @@ public class Student implements Identifiable {
     @JoinColumn(name = "group_id", nullable = false)
     private Group group;
 
-    @StringValidationParameters(minLength = 2, maxLength = 50, pattern = "^[A-Za-z]+$")
+    @NotBlank
+    @Size(min = 2, max = 50)
+    @Pattern(regexp = "^[A-Za-z]+$")
     @Column(nullable = false)
     private String firstName;
 
-    @StringValidationParameters(minLength = 2, maxLength = 50, pattern = "^[A-Za-z]+$")
+    @NotBlank
+    @Size(min = 2, max = 50)
+    @Pattern(regexp = "^[A-Za-z]+$")
     @Column(nullable = false)
     private String lastName;
 

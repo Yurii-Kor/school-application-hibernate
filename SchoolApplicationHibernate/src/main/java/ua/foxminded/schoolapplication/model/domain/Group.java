@@ -1,13 +1,15 @@
 package ua.foxminded.schoolapplication.model.domain;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
-import ua.foxminded.schoolapplication.model.validation.StringValidationParameters;
 
 import java.util.List;
 
@@ -25,8 +27,10 @@ public class Group implements Identifiable {
 	@Column(name = "group_id", nullable = false)
 	private Long id;
 
+	@NotBlank
+	@Size(min = 3, max = 21)
+	@Pattern(regexp = "^[A-Za-z]+-\\d+$")
 	@Column(nullable = false, unique = true)
-	@StringValidationParameters(minLength = 3, maxLength = 21, pattern = "^[A-Za-z]+-\\d+$")
 	private String groupName;
 
 	@ToString.Exclude

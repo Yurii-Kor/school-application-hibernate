@@ -8,16 +8,19 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
-import ua.foxminded.schoolapplication.model.dao.exception.ValidationException;
+
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
+import ua.foxminded.schoolapplication.config.ValidatorConfig;
 import ua.foxminded.schoolapplication.model.domain.Group;
 
-import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(SpringExtension.class)
-@ContextConfiguration(classes = { EntityValidator.class, FieldStringValidator.class })
+@ContextConfiguration(classes = { ValidatorConfig.class })
 class GroupValidatorTest {
 
 	static final String VALID_GROUP_NAME_SIMPLE = "AB-12";
@@ -34,24 +37,25 @@ class GroupValidatorTest {
 	static final String GROUP_PATTERN = "GroupName: {0} | Expected valid: {1}";
 
 	@Autowired
-	private EntityValidator<Group> validator;
+	private Validator validator;
 
 	@ParameterizedTest(name = GROUP_PATTERN)
 	@MethodSource("provideGroupsForValidation")
 	@DisplayName("Group entity validation should behave as expected")
 	void validate_GroupName_ShouldBehaveAsExpected(String groupName, boolean shouldPass) {
-		String actualGroupName = NULL.equals(groupName) ? null : groupName;
+	    String actualGroupName = NULL.equals(groupName) ? null : groupName;
 
-		Group testedGroup = Group.builder().groupName(actualGroupName).build();
+	    Group testedGroup = Group.builder()
+	        .groupName(actualGroupName)
+	        .build();
 
-		if (shouldPass) {
-			assertDoesNotThrow(() -> validator.validateEntities(List.of(testedGroup)),
-					"Validation should pass for groupName: " + groupName);
-		} else {
-			assertThrows(ValidationException.class,
-					() -> validator.validateEntities(List.of(testedGroup)),
-					"Validation should fail for groupName: " + groupName);
-		}
+	    Set<ConstraintViolation<Group>> violations = validator.validate(testedGroup);
+
+	    if (shouldPass) {
+	        assertTrue(violations.isEmpty(), "Expected no violations, but got: " + violations);
+	    } else {
+	        assertFalse(violations.isEmpty(), "Expected violations, but got none");
+	    }
 	}
 
 	static Stream<Arguments> provideGroupsForValidation() {

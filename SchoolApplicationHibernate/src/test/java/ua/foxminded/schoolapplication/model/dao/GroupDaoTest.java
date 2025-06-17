@@ -11,28 +11,26 @@ import org.springframework.context.annotation.Import;
 import org.hibernate.exception.ConstraintViolationException;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceException;
-import ua.foxminded.schoolapplication.config.EntityExistenceValidatorConfig;
 import ua.foxminded.schoolapplication.model.domain.Group;
 import ua.foxminded.schoolapplication.model.domain.Student;
-import ua.foxminded.schoolapplication.model.validation.EntityValidator;
-import ua.foxminded.schoolapplication.model.validation.FieldStringValidator;
 import ua.foxminded.schoolapplication.testutil.TestDataInitializer;
 import ua.foxminded.schoolapplication.testutil.TestEntities;
 import ua.foxminded.schoolapplication.testutil.TestcontainersConfiguration;
-import ua.foxminded.schoolapplication.model.dao.exception.ValidationException;
-import ua.foxminded.schoolapplication.model.dao.exception.EntityIdNotFoundException;
+import ua.foxminded.schoolapplication.model.dao.exception.FieldConstraintException;
+import ua.foxminded.schoolapplication.config.ValidatorConfig;
+import ua.foxminded.schoolapplication.model.dao.exception.IdAwareEntityNotFoundException;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @DataJpaTest
 @TestInstance(Lifecycle.PER_CLASS)
 @Testcontainers
-@Import({ GroupDao.class, StudentDao.class, CourseDao.class, EntityValidator.class, FieldStringValidator.class,
-		TestcontainersConfiguration.class, EntityExistenceValidatorConfig.class, TestDataInitializer.class })
+@Import({ GroupDao.class, StudentDao.class, CourseDao.class, ValidatorConfig.class, TestcontainersConfiguration.class,
+		TestDataInitializer.class })
 
 class GroupDaoTest {
 
@@ -46,6 +44,12 @@ class GroupDaoTest {
 
 	static final Long NON_EXISTENT_ID = 999L;
 	static final int ONE_STUDENT_PROCESSED = 1;
+
+	private static final String SELECT_EXISTING_ENTITIES = "SELECT e FROM %s e WHERE e.id IN :ids";
+	private static final String PARAMETER_IDS = "ids";
+
+	@Autowired
+	private EntityManager em;
 
 	@Autowired
 	private TestDataInitializer initializer;
@@ -86,8 +90,8 @@ class GroupDaoTest {
 		Group saved = groupDao.save(List.of(Group.builder().groupName(DEFAULT_GROUP_NAME).build())).get(0);
 
 		assertNotNull(saved.getId(), "Group ID should not be null after saving");
-		Optional<Group> fetched = groupDao.findById(saved.getId());
-		assertTrue(fetched.isPresent(), "Group should be found by ID");
+		List<Group> fetched = groupDao.findByIds(List.of(saved.getId()));
+		assertFalse(fetched.isEmpty(), "Group should be found by ID");
 		assertEquals(DEFAULT_GROUP_NAME, saved.getGroupName());
 	}
 
@@ -99,9 +103,10 @@ class GroupDaoTest {
 
 		groupDao.save(List.of(originalGroup));
 
-		PersistenceException exception = assertThrows(PersistenceException.class,
-				() -> groupDao.save(List.of(duplicateGroup)),
-				"Saving a group with duplicate groupName should throw PersistenceException");
+		PersistenceException exception = assertThrows(PersistenceException.class, () -> {
+			groupDao.save(List.of(duplicateGroup));
+			em.flush();
+		}, "Saving a group with duplicate groupName should throw PersistenceException");
 
 		System.out.println("Caught expected exception: " + exception.getMessage());
 	}
@@ -112,9 +117,10 @@ class GroupDaoTest {
 		Group originalGroup = Group.builder().groupName(DEFAULT_GROUP_NAME).build();
 		Group duplicateGroup = Group.builder().groupName(DEFAULT_GROUP_NAME).build();
 
-		PersistenceException exception = assertThrows(PersistenceException.class,
-				() -> groupDao.save(List.of(originalGroup, duplicateGroup)),
-				"Saving two groups with duplicate groupName in one call should throw PersistenceException");
+		PersistenceException exception = assertThrows(PersistenceException.class, () -> {
+			groupDao.save(List.of(originalGroup, duplicateGroup));
+			em.flush();
+		}, "Saving two groups with duplicate groupName in one call should throw PersistenceException");
 
 		System.out.println("Caught expected exception: " + exception.getMessage());
 	}
@@ -124,7 +130,7 @@ class GroupDaoTest {
 	void saveShouldThrowExceptionIfGroupNameIsNull() {
 		Group invalidGroup = Group.builder().groupName(UNSAVED_NAME).build();
 
-		assertThrows(ValidationException.class,
+		assertThrows(FieldConstraintException.class,
 				() -> groupDao.save(List.of(invalidGroup)),
 				"Expected ValidationException when group name is null");
 	}
@@ -139,13 +145,13 @@ class GroupDaoTest {
 
 		List<Group> updatedGroups = groupDao.update(currentGroups);
 
-		Optional<Group> groupGotDefaultName = groupDao.findById(updatedGroups.get(0).getId());
-		assertTrue(groupGotDefaultName.isPresent(), "Updated group should be found");
-		assertEquals(DEFAULT_GROUP_NAME, groupGotDefaultName.get().getGroupName(), "Group name should be updated");
+		List<Group> groupGotDefaultName = groupDao.findByIds(List.of(updatedGroups.get(0).getId()));
+		assertFalse(groupGotDefaultName.isEmpty(), "Updated group should be found");
+		assertEquals(DEFAULT_GROUP_NAME, groupGotDefaultName.get(0).getGroupName(), "Group name should be updated");
 
-		Optional<Group> groupGotUpdatedName = groupDao.findById(updatedGroups.get(1).getId());
-		assertTrue(groupGotUpdatedName.isPresent(), "Updated group should be found");
-		assertEquals(UPDATED_GROUP_NAME, groupGotUpdatedName.get().getGroupName(), "Group name should be updated");
+		List<Group> groupGotUpdatedName = groupDao.findByIds(List.of(updatedGroups.get(1).getId()));
+		assertFalse(groupGotUpdatedName.isEmpty(), "Updated group should be found");
+		assertEquals(UPDATED_GROUP_NAME, groupGotUpdatedName.get(0).getGroupName(), "Group name should be updated");
 	}
 
 	@Test
@@ -153,7 +159,7 @@ class GroupDaoTest {
 	void updateShouldThrowExceptionIfGroupNotFound() {
 		Group nonExistent = Group.builder().id(NON_EXISTENT_ID).groupName(UPDATED_GROUP_NAME).build();
 
-		assertThrows(EntityIdNotFoundException.class,
+		assertThrows(IdAwareEntityNotFoundException.class,
 				() -> groupDao.update(List.of(nonExistent)),
 				"Expected exception when updating non-existent group");
 
@@ -162,21 +168,24 @@ class GroupDaoTest {
 	@Test
 	@DisplayName("Delete an existing group")
 	void deleteShouldRemoveGroupById() {
-		Optional<Group> fetched = groupDao.findById(emptyGroup.getId());
-		groupDao.deleteAll(List.of(fetched.get()));
+		List<Group> fetched = groupDao.findByIds(List.of(emptyGroup.getId()));
+		groupDao.deleteAll(List.of(fetched.get(0)));
 
-		Optional<Group> deleted = groupDao.findById(emptyGroup.getId());
-		assertFalse(deleted.isPresent(), "Group should no longer exist after deletion");
+		List<Group> deleted = em
+				.createQuery(String.format(SELECT_EXISTING_ENTITIES, Group.class.getSimpleName()), Group.class)
+				.setParameter(PARAMETER_IDS, List.of(emptyGroup.getId()))
+				.getResultList();
+
+		assertTrue(deleted.isEmpty(), "Group should no longer exist after deletion");
 	}
 
 	@Test
-	@DisplayName("Delete non-existent group should throw EntityNotFoundException")
-	void deleteShouldThrowExceptionIfGroupNotFound() {
+	@DisplayName("Delete non-existent group should return empty list")
+	void deleteShouldReturnEmptyListIfGroupNotFound() {
 		Group nonExistent = Group.builder().id(NON_EXISTENT_ID).groupName(DEFAULT_GROUP_NAME).build();
 
-		assertThrows(EntityIdNotFoundException.class,
-				() -> groupDao.deleteAll(List.of(nonExistent)),
-				"Expected exception when deleting non-existent group");
+		List<Group> deleted = groupDao.deleteAll(List.of(nonExistent));
+		assertTrue(deleted.isEmpty(), "Deleting non-existent group should return empty list");
 	}
 
 	@Test
@@ -184,17 +193,18 @@ class GroupDaoTest {
 	void deleteGroupWithStudentsShouldThrowConstraintViolation() {
 		assertNotNull(fullGroup.getId(), "Group ID must not be null");
 
-		assertThrows(ConstraintViolationException.class,
-				() -> groupDao.deleteAll(List.of(groupDao.findById(fullGroup.getId()).orElseThrow())),
-				"Expected ConstraintViolationException due to existing students");
+		assertThrows(ConstraintViolationException.class, () -> {
+			groupDao.deleteAll(groupDao.findByIds(List.of(fullGroup.getId())));
+			em.flush();
+		}, "Expected ConstraintViolationException due to existing students");
 	}
 
 	@Test
 	@DisplayName("Find non-existent group should return empty Optional")
 	void findByIdShouldReturnEmptyIfNotFound() {
-		Optional<Group> result = groupDao.findById(NON_EXISTENT_ID);
+		List<Group> result = groupDao.findByIds(List.of(NON_EXISTENT_ID));
 
-		assertFalse(result.isPresent(), "Expected empty Optional when group is not found");
+		assertTrue(result.isEmpty(), "Expected empty Optional when group is not found");
 	}
 
 	@Test

@@ -1,10 +1,14 @@
 package ua.foxminded.schoolapplication.view;
 
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.jpa.JpaObjectRetrievalFailureException;
 import org.springframework.stereotype.Component;
+
+import jakarta.persistence.EntityNotFoundException;
+import ua.foxminded.schoolapplication.model.dao.exception.FieldConstraintException;
 import ua.foxminded.schoolapplication.model.domain.Group;
 import ua.foxminded.schoolapplication.model.domain.Student;
 import ua.foxminded.schoolapplication.service.ViewDaoService;
-import ua.foxminded.schoolapplication.service.exception.ServiceOperationException;
 
 import java.util.List;
 import java.util.Scanner;
@@ -34,7 +38,7 @@ public class MenuActions {
 				System.out.println("Groups with student count ≤ " + maxInput + ":");
 				groups.forEach(System.out::println);
 			}
-		} catch (ServiceOperationException e) {
+		} catch (RuntimeException e) {
 			System.err.println("Error: " + e.getMessage());
 		}
 	}
@@ -52,7 +56,7 @@ public class MenuActions {
 				System.out.println("Students enrolled in course '" + courseName + "':");
 				students.forEach(System.out::println);
 			}
-		} catch (ServiceOperationException e) {
+		} catch (RuntimeException e) {
 			System.err.println("Error: " + e.getMessage());
 		}
 	}
@@ -74,11 +78,14 @@ public class MenuActions {
 		try {
 			Student saved = viewDaoService.addStudent(student);
 			System.out.printf("Student added successfully: %s%n", saved);
-		} catch (ServiceOperationException e) {
+		} catch (FieldConstraintException e) {
+			System.err.println("Cannot add student due to validation errors.");
+			System.err.println(e.getMessage());
+		} catch (DataIntegrityViolationException dbex) {
+			System.err.println("Error: Cannot add student because group may not exist or violates DB constraints. "
+					+ dbex.getMessage());
+		} catch (RuntimeException e) {
 			System.err.println("Error: " + e.getMessage());
-			if (!e.getEntities().isEmpty()) {
-				e.getEntities().forEach(entity -> System.err.println("Failed entity: " + entity));
-			}
 		}
 	}
 
@@ -89,7 +96,9 @@ public class MenuActions {
 		try {
 			Student deleted = viewDaoService.deleteStudentById(studentId);
 			System.out.printf("Student deleted: %s%n", deleted);
-		} catch (ServiceOperationException e) {
+		} catch (EntityNotFoundException e) {
+			System.err.printf("Student with id: %s - Not Existed", studentId);
+		} catch (RuntimeException e) {
 			System.err.println("Error: " + e.getMessage());
 		}
 	}
@@ -104,7 +113,13 @@ public class MenuActions {
 		try {
 			viewDaoService.addStudentToCourse(studentId, courseName);
 			System.out.printf("Student with ID %s successfully added to course '%s'%n", studentId, courseName);
-		} catch (ServiceOperationException e) {
+		} catch (JpaObjectRetrievalFailureException e) {
+			if (e.getCause() instanceof EntityNotFoundException) {
+				System.err.println("Entity not found: " + e.getCause().getMessage());
+			} else {
+				throw e;
+			}
+		} catch (RuntimeException e) {
 			System.err.println("Error: " + e.getMessage());
 		}
 	}
@@ -119,7 +134,7 @@ public class MenuActions {
 		try {
 			viewDaoService.removeStudentFromCourse(studentId, courseName);
 			System.out.printf("Student with ID %s removed from course '%s'%n", studentId, courseName);
-		} catch (ServiceOperationException e) {
+		} catch (RuntimeException e) {
 			System.err.println("Error: " + e.getMessage());
 		}
 	}

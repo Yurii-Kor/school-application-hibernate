@@ -9,16 +9,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-import ua.foxminded.schoolapplication.model.dao.exception.ValidationException;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
+import ua.foxminded.schoolapplication.config.ValidatorConfig;
 import ua.foxminded.schoolapplication.model.domain.Course;
 
-import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(SpringExtension.class)
-@ContextConfiguration(classes = { EntityValidator.class, FieldStringValidator.class })
+@ContextConfiguration(classes = { ValidatorConfig.class })
 class CourseValidatorTest {
 
 	static final String VALID_COURSE_NAME = "Mathematics 101";
@@ -33,28 +35,27 @@ class CourseValidatorTest {
 	static final String COURSE_PATTERN = "courseName: \"{0}\", courseDescription: \"{1}\" | Expected valid: {2}";
 
 	@Autowired
-	private EntityValidator<Course> validator;
+	private Validator validator;
 
 	@ParameterizedTest(name = COURSE_PATTERN)
 	@MethodSource("provideCoursesForValidation")
 	@DisplayName("Course entity validation should behave as expected")
 	void validateEntities_ShouldBehaveAsExpected(String courseName, String courseDescription, boolean shouldPass) {
-		String validatedCourseName = NULL.equals(courseName) ? null : courseName;
-		String validatedCourseDescription = NULL.equals(courseDescription) ? null : courseDescription;
+	    String validatedCourseName = NULL.equals(courseName) ? null : courseName;
+	    String validatedCourseDescription = NULL.equals(courseDescription) ? null : courseDescription;
 
-		Course course = Course.builder()
-				.courseName(validatedCourseName)
-				.courseDescription(validatedCourseDescription)
-				.build();
+	    Course course = Course.builder()
+	            .courseName(validatedCourseName)
+	            .courseDescription(validatedCourseDescription)
+	            .build();
 
-		if (shouldPass) {
-			assertDoesNotThrow(() -> validator.validateEntities(List.of(course)),
-					"Validation should pass for course: " + course);
-		} else {
-			assertThrows(ValidationException.class,
-					() -> validator.validateEntities(List.of(course)),
-					"Validation should fail for course: " + course);
-		}
+	    Set<ConstraintViolation<Course>> violations = validator.validate(course);
+
+	    if (shouldPass) {
+	        assertTrue(violations.isEmpty(), "Expected no violations, but got: " + violations);
+	    } else {
+	        assertFalse(violations.isEmpty(), "Expected violations, but got none");
+	    }
 	}
 
 	static Stream<Arguments> provideCoursesForValidation() {

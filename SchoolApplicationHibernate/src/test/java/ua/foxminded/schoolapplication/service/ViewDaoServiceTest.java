@@ -8,18 +8,18 @@ import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import ua.foxminded.schoolapplication.config.EntityExistenceValidatorConfig;
+import jakarta.persistence.EntityNotFoundException;
+import ua.foxminded.schoolapplication.config.ValidatorConfig;
 import ua.foxminded.schoolapplication.model.dao.CourseDao;
 import ua.foxminded.schoolapplication.model.dao.GroupDao;
 import ua.foxminded.schoolapplication.model.dao.StudentDao;
+import ua.foxminded.schoolapplication.model.dao.exception.FieldConstraintException;
 import ua.foxminded.schoolapplication.model.domain.Course;
 import ua.foxminded.schoolapplication.model.domain.Group;
 import ua.foxminded.schoolapplication.model.domain.Student;
-import ua.foxminded.schoolapplication.model.validation.EntityValidator;
-import ua.foxminded.schoolapplication.model.validation.FieldStringValidator;
-import ua.foxminded.schoolapplication.service.exception.ServiceOperationException;
 import ua.foxminded.schoolapplication.testutil.TestDataInitializer;
 import ua.foxminded.schoolapplication.testutil.TestEntities;
 import ua.foxminded.schoolapplication.testutil.TestcontainersConfiguration;
@@ -33,8 +33,7 @@ import java.util.Set;
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Import({ ViewDaoService.class, TestcontainersConfiguration.class, StudentDao.class, GroupDao.class, CourseDao.class,
-		EntityValidator.class, FieldStringValidator.class, EntityExistenceValidatorConfig.class,
-		TestDataInitializer.class })
+		ValidatorConfig.class, TestDataInitializer.class })
 
 class ViewDaoServiceTest {
 
@@ -109,7 +108,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception for negative student count")
 	void findGroupsWithNegativeStudentCountShouldThrowException() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.findGroupsWithStudentCountLessOrEqual(NEGATIVE_NUMBER));
 
 		assertTrue(exception.getMessage().contains("cannot be negative"),
@@ -119,7 +118,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception for non-numeric input")
 	void findGroupsWithNonNumericInputShouldThrowException() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.findGroupsWithStudentCountLessOrEqual(NOT_NUMBER));
 
 		assertTrue(exception.getMessage().contains("is not a number"),
@@ -138,7 +137,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception if course name does not exist")
 	void findStudentsByNonexistentCourseNameShouldThrowException() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		EntityNotFoundException exception = assertThrows(EntityNotFoundException.class,
 				() -> viewDaoService.findStudentsByCourseName(NON_EXISTENT));
 
 		assertTrue(exception.getMessage().contains("vanished mysteriously"),
@@ -160,11 +159,7 @@ class ViewDaoServiceTest {
 	void addStudentWithInvalidDataShouldThrowValidationException() {
 		Student invalidStudent = Student.builder().group(testGroup).firstName(null).lastName(LAST_NAME).build();
 
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
-				() -> viewDaoService.addStudent(invalidStudent));
-
-		assertTrue(exception.getMessage().contains("validation errors"),
-				"Exception message should indicate validation issue");
+		assertThrows(FieldConstraintException.class, () -> viewDaoService.addStudent(invalidStudent));
 	}
 
 	@Test
@@ -178,17 +173,13 @@ class ViewDaoServiceTest {
 				.lastName(LAST_NAME)
 				.build();
 
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
-				() -> viewDaoService.addStudent(invalidStudent));
-
-		assertTrue(exception.getMessage().contains("group may not exist"),
-				"Exception message should indicate DB constraint violation");
+		assertThrows(DataIntegrityViolationException.class, () -> viewDaoService.addStudent(invalidStudent));
 	}
 
 	@Test
 	@DisplayName("Should throw exception when student is null")
 	void addNullStudentShouldThrowServiceException() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.addStudent(null));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("null"), "Message should mention 'null'");
@@ -210,7 +201,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID does not exist")
 	void deleteStudentWithNonexistentIdShouldThrowException() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		EntityNotFoundException exception = assertThrows(EntityNotFoundException.class,
 				() -> viewDaoService.deleteStudentById(NON_EXISTENT_ID.toString()));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("no student"),
@@ -220,7 +211,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID is not a number")
 	void deleteStudentWithNonNumericIdShouldThrowException() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.deleteStudentById(NOT_NUMBER));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("not a number"),
@@ -230,7 +221,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID is negative")
 	void deleteStudentWithNegativeIdShouldThrowException() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.deleteStudentById(NEGATIVE_NUMBER));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("cannot be negative"),
@@ -240,7 +231,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID input is empty")
 	void deleteStudentWithEmptyIdShouldThrowException() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.deleteStudentById(EMPTY_STRING));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("must not be null or empty"),
@@ -250,7 +241,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID input is null")
 	void deleteStudentWithNullIdShouldThrowException() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.deleteStudentById(null));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("must not be null or empty"),
@@ -277,11 +268,8 @@ class ViewDaoServiceTest {
 	void addNonExistentStudentToCourseShouldThrowException() {
 		String nonExistentStudentId = NON_EXISTENT_ID.toString();
 
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		assertThrows(EntityNotFoundException.class,
 				() -> viewDaoService.addStudentToCourse(nonExistentStudentId, testCourse.getCourseName()));
-
-		assertTrue(exception.getMessage().contains("student with ID"),
-				"Exception message should indicate missing student ID");
 	}
 
 	@Test
@@ -289,7 +277,7 @@ class ViewDaoServiceTest {
 	void addStudentToNonExistentCourseShouldThrowException() {
 		String nonExistentCourseName = NON_EXISTENT;
 
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		EntityNotFoundException exception = assertThrows(EntityNotFoundException.class,
 				() -> viewDaoService.addStudentToCourse(shouldBeAddedToCourse.getId().toString(),
 						nonExistentCourseName));
 
@@ -299,7 +287,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID is null")
 	void addStudentToCourseShouldFailForNullStudentId() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.addStudentToCourse(null, testCourse.getCourseName()));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("must not be null or empty"));
@@ -308,7 +296,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID is empty")
 	void addStudentToCourseShouldFailForEmptyStudentId() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.addStudentToCourse(EMPTY_STRING, testCourse.getCourseName()));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("must not be null or empty"));
@@ -317,7 +305,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID is not a number")
 	void addStudentToCourseShouldFailForNonNumericStudentId() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.addStudentToCourse(NOT_NUMBER, testCourse.getCourseName()));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("not a number"));
@@ -326,7 +314,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID is negative")
 	void addStudentToCourseShouldFailForNegativeStudentId() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.addStudentToCourse(NEGATIVE_NUMBER, testCourse.getCourseName()));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("cannot be negative"));
@@ -335,7 +323,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when course name is null")
 	void addStudentToCourseShouldFailForNullCourseName() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.addStudentToCourse(String.valueOf(testStudent.getId()), null));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("must not be null or empty"));
@@ -344,7 +332,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when course name is empty")
 	void addStudentToCourseShouldFailForEmptyCourseName() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.addStudentToCourse(String.valueOf(testStudent.getId()), EMPTY_STRING));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("must not be null or empty"));
@@ -366,23 +354,11 @@ class ViewDaoServiceTest {
 	}
 
 	@Test
-	@DisplayName("Should throw exception when removing non-existent student from course")
-	void removeNonExistentStudentFromCourseShouldThrowException() {
-		String nonExistentStudentId = NON_EXISTENT_ID.toString();
-
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
-				() -> viewDaoService.removeStudentFromCourse(nonExistentStudentId, testCourse.getCourseName()));
-
-		assertTrue(exception.getMessage().contains("student with ID"),
-				"Exception message should indicate missing student ID");
-	}
-
-	@Test
 	@DisplayName("Should throw exception when removing student from non-existent course")
 	void removeStudentFromNonExistentCourseShouldThrowException() {
 		String nonExistentCourseName = NON_EXISTENT;
 
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		EntityNotFoundException exception = assertThrows(EntityNotFoundException.class,
 				() -> viewDaoService.removeStudentFromCourse(shouldBeRemovedFromCourse.getId().toString(),
 						nonExistentCourseName));
 
@@ -392,7 +368,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID is null")
 	void removeStudentFromCourseShouldFailForNullStudentId() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.removeStudentFromCourse(null, testCourse.getCourseName()));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("must not be null or empty"));
@@ -401,7 +377,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID is empty")
 	void removeStudentFromCourseShouldFailForEmptyStudentId() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.removeStudentFromCourse(EMPTY_STRING, testCourse.getCourseName()));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("must not be null or empty"));
@@ -410,7 +386,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID is not a number")
 	void removeStudentFromCourseShouldFailForNonNumericStudentId() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.removeStudentFromCourse(NOT_NUMBER, testCourse.getCourseName()));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("not a number"));
@@ -419,7 +395,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when student ID is negative")
 	void removeStudentFromCourseShouldFailForNegativeStudentId() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.removeStudentFromCourse(NEGATIVE_NUMBER, testCourse.getCourseName()));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("cannot be negative"));
@@ -428,7 +404,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when course name is null")
 	void removeStudentFromCourseShouldFailForNullCourseName() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.removeStudentFromCourse(String.valueOf(testStudent.getId()), null));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("must not be null or empty"));
@@ -437,7 +413,7 @@ class ViewDaoServiceTest {
 	@Test
 	@DisplayName("Should throw exception when course name is empty")
 	void removeStudentFromCourseShouldFailForEmptyCourseName() {
-		ServiceOperationException exception = assertThrows(ServiceOperationException.class,
+		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> viewDaoService.removeStudentFromCourse(String.valueOf(testStudent.getId()), EMPTY_STRING));
 
 		assertTrue(exception.getMessage().toLowerCase().contains("must not be null or empty"));

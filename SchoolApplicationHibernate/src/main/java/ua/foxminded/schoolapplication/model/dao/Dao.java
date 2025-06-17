@@ -3,46 +3,36 @@ package ua.foxminded.schoolapplication.model.dao;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import ua.foxminded.schoolapplication.model.dao.util.EntityExistenceValidator;
+import ua.foxminded.schoolapplication.model.dao.exception.FieldConstraintException;
+import ua.foxminded.schoolapplication.model.dao.exception.IdAwareEntityNotFoundException;
 import ua.foxminded.schoolapplication.model.domain.Identifiable;
-import ua.foxminded.schoolapplication.model.validation.EntityValidator;
 
+import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.Objects;
+import java.util.Set;
 
 @Transactional(Transactional.TxType.REQUIRED)
 public abstract class Dao<T extends Identifiable> {
 
 	private static final Logger logger = LoggerFactory.getLogger(Dao.class);
-
-	private static final String SELECT_EXISTING_ENTITIES = "SELECT e FROM %s e WHERE e.id IN :ids";
-	private static final String PARAMETER_IDS = "ids";
+	
+    private final Validator validator;
 
 	@PersistenceContext
 	protected EntityManager em;
 
 	protected final Class<T> entityClass;
-	protected final EntityValidator<T> validator;
-	protected final EntityExistenceValidator<T> existenceValidator;
 
-	protected Dao(Class<T> entityClass, EntityValidator<T> validator, EntityExistenceValidator<T> existenceValidator) {
-		this.entityClass = entityClass; 
+	protected Dao(Class<T> entityClass, Validator validator) {
+		this.entityClass = entityClass;
 		this.validator = validator;
-		this.existenceValidator = existenceValidator;
-	}
-
-	@Transactional(Transactional.TxType.SUPPORTS)
-	public Optional<T> findById(Long id) {
-		Optional<T> entityOptional = Optional.ofNullable(em.find(entityClass, id));
-
-		entityOptional.ifPresentOrElse(
-				entity -> logger.info("Entity [{}] found: {}", entityClass.getSimpleName(), entity),
-				() -> logger.warn("Entity [{}] not found with ID: {}", entityClass.getSimpleName(), id));
-
-		return entityOptional;
 	}
 
 	@Transactional(Transactional.TxType.SUPPORTS)
@@ -51,53 +41,81 @@ public abstract class Dao<T extends Identifiable> {
 			return List.of();
 		}
 
-		return em.createQuery(String.format(SELECT_EXISTING_ENTITIES, entityClass.getSimpleName()), entityClass)
-				.setParameter(PARAMETER_IDS, ids)
-				.getResultList();
+		return ids.stream().map(id -> em.find(entityClass, id)).filter(entity -> entity != null).toList();
 	}
 
 	public List<T> save(List<T> entities) {
-		validator.validateEntities(entities);
+		validateEntities(entities);
 
 		logger.debug("Saving [{}] entities: {}", entityClass.getSimpleName(), entities);
 
-		entities.stream().peek(entity -> logger.debug("Persisting entity: {}", entity)).forEach(em::persist);
-
-		em.flush();
+		entities.stream().forEach(em::persist);
 
 		logger.info("All [{}] entities saved successfully", entityClass.getSimpleName());
 		return entities;
 	}
 
 	public List<T> update(List<T> entities) {
-		validator.validateEntities(entities);
-		existenceValidator.validateEntitiesExist(entities);
+		validateEntities(entities);
+
+		List<Long> ids = entities.stream().map(Identifiable::getId).filter(Objects::nonNull).toList();
+		List<T> existedEntities = findByIds(ids);
+
+		if (existedEntities.size() != entities.size()) {
+			List<Long> foundIds = existedEntities.stream().map(Identifiable::getId).toList();
+			List<Long> missingIds = ids.stream().filter(id -> !foundIds.contains(id)).toList();
+
+			logger.warn("Entity existence check failed. Missing IDs for type [{}]: {}",
+					entityClass.getSimpleName(),
+					missingIds);
+			throw new IdAwareEntityNotFoundException("Missing entities with IDs: ", missingIds);
+		}
 
 		logger.debug("Updating [{}] entities: {}", entityClass.getSimpleName(), entities);
 
-		List<T> mergedEntities = entities.stream()
-				.peek(entity -> logger.debug("Merging entity: {}", entity))
-				.map(em::merge)
-				.toList();
-
-		em.flush();
+		List<T> mergedEntities = entities.stream().map(em::merge).toList();
 
 		logger.info("All [{}] entities updated successfully", entityClass.getSimpleName());
 		return mergedEntities;
 	}
 
-	public void deleteAll(List<T> entities) {
+	public List<T> deleteAll(List<T> entities) {
+		if (entities == null || entities.isEmpty()) {
+			return List.of();
+		}
 		logger.debug("Attempting to remove [{}] entities of type [{}]", entities.size(), entityClass.getSimpleName());
 
-		existenceValidator.validateEntitiesExist(entities);
+		List<Long> ids = entities.stream().map(Identifiable::getId).toList();
+		List<T> entitiesToRemove = findByIds(ids);
 
-		entities.forEach(entity -> {
+		if (entitiesToRemove.isEmpty()) {
+			logger.warn("No entities found to remove for type [{}] with IDs: {}", entityClass.getSimpleName(), ids);
+			return List.of();
+		}
+
+		entitiesToRemove.forEach(entity -> {
 			em.remove(entity);
-			logger.debug("Removed entity: {}", entity);
 		});
 
-		em.flush();
-
 		logger.info("All [{}] entities removed successfully", entityClass.getSimpleName());
+		return entitiesToRemove;
+	}
+	
+	protected void validateEntities(List<T> entities) {
+		if (entities == null || entities.isEmpty()) {
+			throw new IllegalArgumentException("The list of entities must not be null or empty");
+
+		}
+		
+	    Set<ConstraintViolation<?>> allViolations = new HashSet<>();
+
+	    for (T entity : entities) {
+	        Set<? extends ConstraintViolation<?>> violations = validator.validate(entity);
+	        allViolations.addAll(violations);
+	    }
+
+	    if (!allViolations.isEmpty()) {
+	        throw new FieldConstraintException(allViolations);
+	    }
 	}
 }

@@ -16,9 +16,7 @@ import ua.foxminded.schoolapplication.model.dao.StudentDao;
 import ua.foxminded.schoolapplication.model.domain.Course;
 import ua.foxminded.schoolapplication.model.domain.Group;
 import ua.foxminded.schoolapplication.model.domain.Student;
-import ua.foxminded.schoolapplication.service.exception.ServiceOperationException;
-import org.hibernate.exception.ConstraintViolationException;
-import ua.foxminded.schoolapplication.model.dao.exception.ValidationException;
+import jakarta.persistence.EntityNotFoundException;
 
 @Service
 @Transactional(value = TxType.REQUIRES_NEW)
@@ -56,7 +54,7 @@ public class ViewDaoService {
 
 		Course course = courseDao.findByCourseName(courseNameInput).orElseThrow(() -> {
 			logger.warn("No course found with name '{}'", courseNameInput);
-			throw new ServiceOperationException(
+			throw new EntityNotFoundException(
 					String.format("Could not find students because course '%s' seems to have vanished mysteriously",
 							courseNameInput));
 		});
@@ -69,27 +67,14 @@ public class ViewDaoService {
 
 	public Student addStudent(Student student) {
 		if (student == null) {
-			throw new ServiceOperationException("Cannot add student: input is null.");
+			throw new IllegalArgumentException("Cannot add student: input is null.");
 		}
 
 		logger.debug("Attempting to add student: {}", student);
-		try {
-			Student savedStudent = studentDao.save(List.of(student)).get(0);
-			logger.info("Student saved successfully: {}", savedStudent);
+		Student savedStudent = studentDao.save(List.of(student)).get(0);
+		logger.info("Student saved successfully: {}", savedStudent);
 
-			return savedStudent;
-		} catch (ValidationException e) {
-			logger.warn("Validation failed for student: {}", student, e);
-			throw new ServiceOperationException("Cannot add student due to validation errors.", List.of(student));
-		} catch (ConstraintViolationException e) {
-			logger.warn("Database constraint violation when saving student: {}", student, e);
-			throw new ServiceOperationException(
-					"Cannot add student because group may not exist or violates DB constraints.", List.of(student));
-		} catch (RuntimeException e) {
-			logger.error("Unexpected runtime error while saving student: {}", student, e);
-			throw new ServiceOperationException("An unexpected error occurred while saving the student.",
-					List.of(student));
-		}
+		return savedStudent;
 	}
 
 	public Student deleteStudentById(String studentIdInput) {
@@ -100,23 +85,17 @@ public class ViewDaoService {
 		Long parsedId = parseLong(studentIdInput);
 		validateNonNegativeLong(parsedId, String.format("Student ID cannot be negative: %d", parsedId));
 
-		Student studentToDelete = studentDao.findById(parsedId).orElseThrow(() -> {
+		Student studentToDelete = studentDao.findByIds(List.of(parsedId)).stream().findFirst().orElseThrow(() -> {
 			logger.warn("Student with ID {} does not exist", parsedId);
-			return new ServiceOperationException(
+			return new EntityNotFoundException(
 					String.format("Cannot delete student: no student found with ID %d", parsedId));
 		});
 
-		try {
-			logger.debug("Deleting student: {}", studentToDelete);
-			studentDao.deleteAll(List.of(studentToDelete));
-			logger.info("Successfully deleted student with ID {}", parsedId);
+		logger.debug("Deleting student: {}", studentToDelete);
+		studentDao.deleteAll(List.of(studentToDelete));
+		logger.info("Successfully deleted student with ID {}", parsedId);
 
-			return studentToDelete;
-		} catch (RuntimeException e) {
-			logger.error("Unexpected error while deleting student with ID {}", parsedId, e);
-			throw new ServiceOperationException(
-					String.format("Unexpected error occurred while deleting student with ID %d", parsedId), e);
-		}
+		return studentToDelete;
 	}
 
 	public Course addStudentToCourse(String studentIdInput, String courseNameInput) {
@@ -127,32 +106,19 @@ public class ViewDaoService {
 		long parsedStudentId = parseLong(studentIdInput);
 		validateNonNegativeLong(parsedStudentId, String.format("Student ID cannot be negative: %d", parsedStudentId));
 
-		Student student = studentDao.findById(parsedStudentId).orElseThrow(() -> {
-			logger.warn("Student with ID {} does not exist", parsedStudentId);
-			return new ServiceOperationException(
-					String.format("Cannot add to course: student with ID %d not found", parsedStudentId));
-		});
-
 		Course course = courseDao.findByCourseName(courseNameInput).orElseThrow(() -> {
 			logger.warn("Course with name '{}' does not exist", courseNameInput);
-			return new ServiceOperationException(
+			return new EntityNotFoundException(
 					String.format("Cannot add student to course: course '%s' not found", courseNameInput));
 		});
 
-		try {
-			logger.debug("Adding student '{}' to course '{}'", student, course);
-			courseDao.addStudentsToCourse(course, Set.of(student));
-			logger.info("Student with ID {} successfully added to course '{}'", student.getId(), courseNameInput);
+		Student student = Student.builder().id(parsedStudentId).build();
 
-			return course;
-		} catch (RuntimeException e) {
-			logger.error("Unexpected error while adding student to course", e);
-			throw new ServiceOperationException(
-					String.format("Unexpected error occurred while adding student with ID %d to course '%s'",
-							student.getId(),
-							courseNameInput),
-					e);
-		}
+		logger.debug("Adding student '{}' to course '{}'", student, course);
+		courseDao.addStudentsToCourse(course, Set.of(student));
+		logger.info("Student with ID {} successfully added to course '{}'", student.getId(), courseNameInput);
+
+		return course;
 	}
 
 	public Course removeStudentFromCourse(String studentIdInput, String courseNameInput) {
@@ -163,32 +129,19 @@ public class ViewDaoService {
 		long parsedStudentId = parseLong(studentIdInput);
 		validateNonNegativeLong(parsedStudentId, String.format("Student ID cannot be negative: %d", parsedStudentId));
 
-		Student student = studentDao.findById(parsedStudentId).orElseThrow(() -> {
-			logger.warn("Student with ID {} does not exist", parsedStudentId);
-			return new ServiceOperationException(
-					String.format("Cannot remove from course: student with ID %d not found", parsedStudentId));
-		});
-
 		Course course = courseDao.findByCourseName(courseNameInput).orElseThrow(() -> {
 			logger.warn("Course with name '{}' does not exist", courseNameInput);
-			return new ServiceOperationException(
+			return new EntityNotFoundException(
 					String.format("Cannot remove student from course: course '%s' not found", courseNameInput));
 		});
+		
+		Student student = Student.builder().id(parsedStudentId).build();
 
-		try {
-			logger.debug("Removing student '{}' from course '{}'", student, course);
-			courseDao.removeStudentsFromCourse(course, Set.of(student));
-			logger.info("Student with ID {} successfully removed from course '{}'", student.getId(), courseNameInput);
+		logger.debug("Removing student '{}' from course '{}'", student, course);
+		courseDao.removeStudentsFromCourse(course, Set.of(student));
+		logger.info("Student with ID {} successfully removed from course '{}'", student.getId(), courseNameInput);
 
-			return course;
-		} catch (RuntimeException e) {
-			logger.error("Unexpected error while removing student from course", e);
-			throw new ServiceOperationException(
-					String.format("Unexpected error occurred while removing student with ID %d from course '%s'",
-							student.getId(),
-							courseNameInput),
-					e);
-		}
+		return course;
 	}
 
 	private Long parseLong(String input) {
@@ -196,21 +149,21 @@ public class ViewDaoService {
 			return Long.parseLong(input);
 		} catch (NumberFormatException e) {
 			logger.error("Failed to parse input '{}' as number", input, e);
-			throw new ServiceOperationException(String.format("Invalid Input: '%s' is not a number.", input), e);
+			throw new IllegalArgumentException(String.format("Invalid Input: '%s' is not a number.", input), e);
 		}
 	}
 
 	private void validateInputString(String input, String errorMessage) {
 		if (input == null || input.trim().isEmpty()) {
 			logger.warn("Provided input string is null or empty");
-			throw new ServiceOperationException(errorMessage);
+			throw new IllegalArgumentException(errorMessage);
 		}
 	}
 
 	private void validateNonNegativeLong(Long id, String errorMessage) {
 		if (id < 0) {
 			logger.warn("Provided ID is negative: {}", id);
-			throw new ServiceOperationException(errorMessage);
+			throw new IllegalArgumentException(errorMessage);
 		}
 	}
 }

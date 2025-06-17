@@ -8,23 +8,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.hibernate.exception.ConstraintViolationException;
+
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import ua.foxminded.schoolapplication.config.EntityExistenceValidatorConfig;
-import ua.foxminded.schoolapplication.model.dao.exception.EntityIdNotFoundException;
-import ua.foxminded.schoolapplication.model.dao.exception.ValidationException;
+import ua.foxminded.schoolapplication.config.ValidatorConfig;
+import ua.foxminded.schoolapplication.model.dao.exception.IdAwareEntityNotFoundException;
 import ua.foxminded.schoolapplication.model.domain.Course;
 import ua.foxminded.schoolapplication.model.domain.Group;
 import ua.foxminded.schoolapplication.model.domain.Student;
-import ua.foxminded.schoolapplication.model.validation.EntityValidator;
-import ua.foxminded.schoolapplication.model.validation.FieldStringValidator;
 import ua.foxminded.schoolapplication.testutil.TestDataInitializer;
 import ua.foxminded.schoolapplication.testutil.TestEntities;
 import ua.foxminded.schoolapplication.testutil.TestcontainersConfiguration;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -32,8 +30,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @DataJpaTest
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@Import({ TestcontainersConfiguration.class, StudentDao.class, GroupDao.class, CourseDao.class, EntityValidator.class,
-		FieldStringValidator.class, EntityExistenceValidatorConfig.class, TestDataInitializer.class })
+@Import({ TestcontainersConfiguration.class, StudentDao.class, GroupDao.class, CourseDao.class, ValidatorConfig.class,
+		TestDataInitializer.class })
 
 class StudentDaoTest {
 
@@ -50,6 +48,9 @@ class StudentDaoTest {
 	static final int ONE_COURSE_PROCESSED = 1;
 
 	@Autowired
+	private EntityManager em;
+
+	@Autowired
 	private TestDataInitializer initializer;
 
 	@Autowired
@@ -61,15 +62,15 @@ class StudentDaoTest {
 
 	@BeforeAll
 	void setup() {
-		Group rawGroup = Group.builder().groupName(DEFAULT_GROUP_NAME).build();
-		Course rawCourse = Course.builder().courseName(DEFAULT_COURSE_NAME).build();
-		Student rawStudent = Student.builder()
-				.group(rawGroup)
+		testGroup = Group.builder().groupName(DEFAULT_GROUP_NAME).build();
+		testCourse = Course.builder().courseName(DEFAULT_COURSE_NAME).build();
+		testStudent = Student.builder()
+				.group(testGroup)
 				.firstName(DEFAULT_FIRST_NAME)
 				.lastName(DEFAULT_LAST_NAME)
 				.build();
 
-		TestEntities entities = initializer.initialize(List.of(rawGroup), List.of(rawCourse), List.of(rawStudent));
+		TestEntities entities = initializer.initialize(List.of(testGroup), List.of(testCourse), List.of(testStudent));
 
 		testGroup = entities.groups().get(0);
 		testCourse = entities.courses().get(0);
@@ -84,11 +85,11 @@ class StudentDaoTest {
 				.get(0);
 		assertNotNull(saved.getId(), "Student ID should not be null after saving");
 
-		Optional<Student> fetched = studentDao.findById(saved.getId());
-		assertTrue(fetched.isPresent(), "Student should be found after saving");
-		assertEquals(testGroup.getId(), fetched.get().getGroup().getId());
-		assertEquals(DEFAULT_FIRST_NAME, fetched.get().getFirstName());
-		assertEquals(DEFAULT_LAST_NAME, fetched.get().getLastName());
+		List<Student> fetched = studentDao.findByIds(List.of(saved.getId()));
+		assertFalse(fetched.isEmpty(), "Student should be found after saving");
+		assertEquals(testGroup.getId(), fetched.get(0).getGroup().getId());
+		assertEquals(DEFAULT_FIRST_NAME, fetched.get(0).getFirstName());
+		assertEquals(DEFAULT_LAST_NAME, fetched.get(0).getLastName());
 	}
 
 	@Test
@@ -102,15 +103,16 @@ class StudentDaoTest {
 				.lastName(DEFAULT_LAST_NAME)
 				.build();
 
-		assertThrows(ConstraintViolationException.class,
-				() -> studentDao.save(List.of(student)),
-				"Expected ConstraintViolationException when saving student with non-existent group");
+		assertThrows(ConstraintViolationException.class, () -> {
+			studentDao.save(List.of(student));
+			em.flush();
+		}, "Expected ConstraintViolationException when saving student with non-existent group");
 	}
 
 	@Test
 	@DisplayName("Save with null entity list should throw ValidationException")
 	void saveWithNullEntityListShouldThrowException() {
-		assertThrows(ValidationException.class,
+		assertThrows(IllegalArgumentException.class,
 				() -> studentDao.save(null),
 				"Expected ValidationException for null entity list");
 	}
@@ -118,7 +120,7 @@ class StudentDaoTest {
 	@Test
 	@DisplayName("Save with empty entity list should throw ValidationException")
 	void saveWithEmptyEntityListShouldThrowException() {
-		assertThrows(ValidationException.class,
+		assertThrows(IllegalArgumentException.class,
 				() -> studentDao.save(List.of()),
 				"Expected ValidationException for empty entity list");
 	}
@@ -131,10 +133,10 @@ class StudentDaoTest {
 
 		Student updated = studentDao.update(List.of(testStudent)).get(0);
 
-		Optional<Student> fetched = studentDao.findById(updated.getId());
-		assertTrue(fetched.isPresent(), "Updated student should be found");
-		assertEquals(UPDATED_FIRST_NAME, fetched.get().getFirstName());
-		assertEquals(UPDATED_LAST_NAME, fetched.get().getLastName());
+		List<Student> fetched = studentDao.findByIds(List.of(updated.getId()));
+		assertFalse(fetched.isEmpty(), "Updated student should be found");
+		assertEquals(UPDATED_FIRST_NAME, fetched.get(0).getFirstName());
+		assertEquals(UPDATED_LAST_NAME, fetched.get(0).getLastName());
 	}
 
 	@Test
@@ -147,7 +149,7 @@ class StudentDaoTest {
 				.lastName(UPDATED_LAST_NAME)
 				.build();
 
-		assertThrows(EntityIdNotFoundException.class,
+		assertThrows(IdAwareEntityNotFoundException.class,
 				() -> studentDao.update(List.of(nonExistent)),
 				"Expected EntityNotFoundException for non-existent student");
 	}
@@ -168,7 +170,7 @@ class StudentDaoTest {
 	@Test
 	@DisplayName("Update with null entity list should throw ValidationException")
 	void updateWithNullEntityListShouldThrowException() {
-		assertThrows(ValidationException.class,
+		assertThrows(IllegalArgumentException.class,
 				() -> studentDao.update(null),
 				"Expected ValidationException for null entity list");
 	}
@@ -176,7 +178,7 @@ class StudentDaoTest {
 	@Test
 	@DisplayName("Update with empty entity list should throw ValidationException")
 	void updateWithEmptyEntityListShouldThrowException() {
-		assertThrows(ValidationException.class,
+		assertThrows(IllegalArgumentException.class,
 				() -> studentDao.update(List.of()),
 				"Expected ValidationException for empty entity list");
 	}
@@ -184,25 +186,25 @@ class StudentDaoTest {
 	@Test
 	@DisplayName("Find by ID should return empty if student does not exist")
 	void findByIdShouldReturnEmptyOptionalIfNotFound() {
-		Optional<Student> result = studentDao.findById(NON_EXISTENT_ID);
+		List<Student> result = studentDao.findByIds(List.of(NON_EXISTENT_ID));
 
-		assertFalse(result.isPresent(), "Expected empty optional for non-existent student");
+		assertTrue(result.isEmpty(), "Expected empty optional for non-existent student");
 	}
 
 	@Test
 	@DisplayName("Delete should remove student from database")
 	void deleteShouldRemoveStudent() {
-		Student student = studentDao.findById(testStudent.getId()).get();
+		Student student = studentDao.findByIds(List.of(testStudent.getId())).get(0);
 
 		studentDao.deleteAll(List.of(student));
 
-		Optional<Student> deleted = studentDao.findById(student.getId());
-		assertFalse(deleted.isPresent(), "Student should be deleted");
+		List<Student> deleted = studentDao.findByIds(List.of(student.getId()));
+		assertTrue(deleted.isEmpty(), "Student should be deleted");
 	}
 
 	@Test
-	@DisplayName("Delete non-existent student should throw EntityNotFoundException")
-	void deleteNonExistentStudentShouldThrowException() {
+	@DisplayName("Delete non-existent student should return empty list")
+	void deleteNonExistentStudentShouldReturnEmptyList() {
 		Student detachedStudent = Student.builder()
 				.id(NON_EXISTENT_ID)
 				.group(testGroup)
@@ -210,9 +212,9 @@ class StudentDaoTest {
 				.lastName(DEFAULT_LAST_NAME)
 				.build();
 
-		assertThrows(EntityIdNotFoundException.class,
-				() -> studentDao.deleteAll(List.of(detachedStudent)),
-				"Expected EntityNotFoundException for non-existent student");
+		List<Student> deleted = studentDao.deleteAll(List.of(detachedStudent));
+
+		assertTrue(deleted.isEmpty(), "Deleting non-existent student should return empty list");
 	}
 
 	@Test
@@ -233,7 +235,7 @@ class StudentDaoTest {
 	void addNonExistentCourseToStudentShouldThrowException() {
 		Course detachedCourse = Course.builder().id(NON_EXISTENT_ID).courseName(NON_EXISTENT_COURSE_NAME).build();
 
-		assertThrows(EntityIdNotFoundException.class,
+		assertThrows(EntityNotFoundException.class,
 				() -> studentDao.addCoursesToStudent(testStudent, Set.of(detachedCourse)),
 				"Expected EntityIdNotFoundException when adding non-existent course");
 	}
