@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-set -eush <image-tag>}"
+set -euo pipefail
+
+image_tag="${1:?Usage: verify_docker_demo.sh <image-tag>}"
 development_compose_file="${2:-docker-compose.yml}"
 demo_compose_file="${3:-compose.demo.yaml}"
 
