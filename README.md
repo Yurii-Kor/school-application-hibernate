@@ -21,27 +21,48 @@ The project also demonstrates how transaction boundaries affect entity state. DA
 For background on JPA entity mapping, see the Baeldung guide: [Defining JPA Entities](https://www.baeldung.com/jpa-entities).
 
 ---
-## 📦 Features
+<details open>
+<summary><h2>Technology Stack</h2></summary>
 
-This application provides a simple CLI interface for managing school data:
+| Area | Technology |
+|---|---|
+| Language | Java 21 |
+| Build tool | Maven |
+| Application framework | Spring Boot |
+| Persistence API | JPA |
+| ORM provider | Hibernate |
+| Persistence access | `EntityManager`, persistence context |
+| Database | PostgreSQL |
+| Database migrations | Flyway |
+| Validation | Jakarta Bean Validation |
+| Testing | JUnit 5, Mockito, Spring Test, Testcontainers |
+| Containerization | Docker, Docker Compose |
+| CI/CD | GitHub Actions, Docker Hub release workflow |
 
-- 🔍 View all groups with a student count less than or equal to a specified number
-- 📚 List all students enrolled in a specific course
-- ➕ Add a new student to a group
-- ❌ Delete a student by ID
-- 🔗 Assign a student to a course
-- 🔓 Remove a student from a course
+This project moves persistence from explicit JDBC queries to an ORM-based model. The application works with JPA entities and relationships, while Hibernate handles SQL generation, entity state transitions, persistence context synchronization, and object-relational mapping.
 
-## 🧱 Tech Stack
+</details>
 
-- Java 21  
-- Spring Boot 3.4  
-- Hibernate / JPA  
-- Flyway  
-- PostgreSQL  
-- HikariCP for connection pooling  
-- Docker + Docker Compose
+---
+<details>
+<summary><h2>Features</h2></summary>
 
+The service and DAO layers support the core school-management operations for groups, students, courses, and student-course enrollments.
+
+Unlike the previous Spring JDBC project, persistence operations are implemented through JPA entities and `EntityManager` instead of manual SQL row mapping.
+
+The console UI exposes the following user-facing actions:
+
+- Find all groups with a student count less than or equal to a given number.
+- List all students enrolled in a course by course name.
+- Add a new student.
+- Delete a student by student ID.
+- Assign a student to a course.
+- Remove a student from one of their courses.
+
+</details>
+
+---
 ## 🐳 Dockerized Deployment
 
 The application requires PostgreSQL and can be run in two ways:
