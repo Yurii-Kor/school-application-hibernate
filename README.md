@@ -453,3 +453,33 @@ java -jar target/SchoolApplicationHibernate-1.0.0.jar
 The application still requires PostgreSQL to be available according to the configured datasource properties. For a fully prepared local environment, prefer the Docker-based startup scripts described above.
 
 </details>
+
+---
+## Project Scope
+
+This project is part of a learning series that implements the same school-management domain through progressively higher persistence abstractions:
+
+1. [School Application JDBC](https://github.com/Yurii-Kor/school-application-jdbc) — plain JDBC, SQL, DAO pattern, manual wiring.
+2. [School Application on Spring](https://github.com/Yurii-Kor/school-application-on-spring) — Spring Boot with Spring JDBC infrastructure.
+3. [School Application Hibernate](https://github.com/Yurii-Kor/school-application-hibernate) — Hibernate / JPA persistence layer.
+4. [School Application Spring Data JPA](https://github.com/Yurii-Kor/school-application-spring-data-jpa) — Spring Data JPA repositories.
+
+The goal of the series is to show how the data access layer evolves from manual SQL and JDBC code to repository-based persistence.
+
+This repository represents the third step of the series. It moves the persistence layer from SQL-oriented DAO methods to an ORM-based model built with JPA entities, relationships, transactions, and `EntityManager`.
+
+Hibernate is used as the JPA provider, but the application code depends on the standard JPA API instead of Hibernate-specific interfaces. This keeps the project focused on portable JPA concepts while still demonstrating how Hibernate manages object-relational mapping under the hood.
+
+It demonstrates:
+
+- JPA entity mapping with `@Entity`, `@Table`, `@Id`, and relationship annotations.
+- Hibernate as the ORM provider for the JPA specification.
+- DAO classes implemented with `EntityManager` instead of `JdbcTemplate`.
+- Managed entities and persistence context behavior inside transaction boundaries.
+- Entity relationships between `Group`, `Student`, and `Course`.
+- Many-to-many enrollment mapping between students and courses.
+- Transactional persistence operations through Spring.
+- PostgreSQL schema management through Flyway migrations.
+- Jakarta Bean Validation for entity and input validation.
+- Integration testing with Spring Test and Testcontainers.
+- Dockerized runtime setup and GitHub Actions CI/CD.
