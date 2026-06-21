@@ -63,6 +63,68 @@ The console UI exposes the following user-facing actions:
 </details>
 
 ---
+<details open>
+<summary><h2>Application Structure</h2></summary>
+
+This diagram shows the main structural blocks of the Hibernate / JPA version.  
+It highlights the transition from SQL-oriented DAO logic to entity-based persistence through JPA and Hibernate.
+
+![School Application Hibernate application structure](docs/diagrams/application-structure.svg)
+
+In this project, the console UI still exposes the same school-management actions, but the persistence layer now works with JPA entities and relationships instead of manually mapping SQL result rows.
+
+The main flow is:
+
+```text
+Spring Boot Entry Point → Console UI → Service Layer → DAO Layer → EntityManager → Hibernate / JPA → PostgreSQL
+````
+
+The PlantUML source for this diagram is stored in:
+
+```text
+docs/diagrams/application-structure.puml
+```
+
+The rendered SVG diagram is stored in:
+
+```text
+docs/diagrams/application-structure.svg
+```
+
+</details>
+
+---
+<details open>
+<summary><h2>Database Schema</h2></summary>
+
+The application uses the same school-management database schema as the previous projects in the series: academic groups, students, courses, and a many-to-many relation between students and courses.
+
+![School Application Hibernate database schema](docs/diagrams/database-schema.svg)
+
+| Table              | Purpose                                  | Seed data                                  |
+| ------------------ | ---------------------------------------- | ------------------------------------------ |
+| `groups`           | Stores academic groups                   | 10 random groups, IDs start from `100`     |
+| `students`         | Stores students assigned to groups       | 200 random students, IDs start from `1000` |
+| `courses`          | Stores available courses                 | 10 predefined courses, IDs start from `10` |
+| `students_courses` | Join table for student-course enrollment | Each student gets 1–3 random courses       |
+
+In this repository, the schema is still managed through Flyway migrations, but application code interacts with the data through JPA entities such as `Student`, `Group`, and `Course`.
+
+The PlantUML source for this diagram is stored in:
+
+```text
+docs/diagrams/database-schema.puml
+```
+
+The rendered SVG diagram is stored in:
+
+```text
+docs/diagrams/database-schema.svg
+```
+
+</details>
+
+---
 ## 🐳 Dockerized Deployment
 
 The application requires PostgreSQL and can be run in two ways:
