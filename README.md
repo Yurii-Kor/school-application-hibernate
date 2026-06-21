@@ -1,7 +1,26 @@
-# SchoolApplicationHibernate
+# School Application Hibernate
 
-📘 **SchoolApplicationHibernate** is a console-based Spring Boot application for managing academic groups, students, and courses. It now uses `Hibernate` and `JPA` for ORM, replacing direct JDBC usage. The system is built on top of `Spring Boot`, with `PostgreSQL` as the relational database and `Flyway` for schema migrations.
+### Java 21 · Spring Boot · Hibernate / JPA · Version 1.0.0
 
+[![Hibernate CI](https://github.com/Yurii-Kor/school-application-hibernate/actions/workflows/hibernate-ci.yml/badge.svg)](https://github.com/Yurii-Kor/school-application-hibernate/actions/workflows/hibernate-ci.yml)
+![Java](https://img.shields.io/badge/Java-21-orange)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.4-brightgreen)
+![JPA](https://img.shields.io/badge/Persistence-JPA%20%2F%20Hibernate-blue)
+![Database](https://img.shields.io/badge/Database-PostgreSQL-blue)
+![Docker](https://img.shields.io/badge/Docker-ready-blue)
+![Type](https://img.shields.io/badge/Type-Console%20Application-lightgrey)
+
+Console-based school management application built with Spring Boot, JPA, Hibernate, PostgreSQL, Flyway, Bean Validation, Docker, and GitHub Actions.
+
+This project is the third step in the School Application learning series. Unlike the Spring JDBC version, it no longer maps SQL result rows manually. Instead, the persistence layer works with JPA entities, relationships, transactions, and the persistence context through the standard `EntityManager` API.
+
+Hibernate is used as the JPA provider, while the application code depends on JPA interfaces rather than Hibernate-specific APIs. This keeps the ORM implementation visible as infrastructure, but keeps the DAO and service layers focused on the JPA programming model.
+
+The project also demonstrates how transaction boundaries affect entity state. DAO methods work with managed entities inside a transaction, and although DAO classes use their own injected `EntityManager` field, the persistence context is effectively scoped to the active transaction.
+
+For background on JPA entity mapping, see the Baeldung guide: [Defining JPA Entities](https://www.baeldung.com/jpa-entities).
+
+---
 ## 📦 Features
 
 This application provides a simple CLI interface for managing school data:
